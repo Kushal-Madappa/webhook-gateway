@@ -1,0 +1,35 @@
+# `docker compose up` from a clean clone brings up Postgres + the API. The worker
+# service is added in Stage 3 (it needs app/worker.py). Migrations run
+# automatically via entrypoint.sh before the API starts.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: gateway
+      POSTGRES_PASSWORD: gateway
+      POSTGRES_DB: gateway
+    ports:
+      # Host 5433 -> container 5432 (host 5432 is often taken by a local Postgres).
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gateway -d gateway"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: .
+    command: ["api"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://gateway:gateway@db:5432/gateway
+      ADMIN_TOKEN: change-me-admin-token
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+volumes:
+  pgdata:
