@@ -1,7 +1,7 @@
 """FastAPI application entrypoint.
 
-Stage 1 exposes only /healthz. Ingest, inspection and replay endpoints are added
-in later stages.
+Stage 2 exposes /healthz plus the ingest and admin source endpoints. Inspection
+and replay endpoints are added in a later stage.
 """
 from __future__ import annotations
 
@@ -10,8 +10,12 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db import get_session
+from app.routers import sources, webhooks
 
 app = FastAPI(title="Reliable Webhook Gateway", version="0.1.0")
+
+app.include_router(sources.router)
+app.include_router(webhooks.router)
 
 
 @app.get("/healthz")
