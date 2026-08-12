@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Wait for Postgres, then apply migrations before starting any process. Running
-# `alembic upgrade head` on every boot is idempotent and keeps a clean clone
-# working with a single `docker compose up`.
-echo "[entrypoint] applying migrations..."
-alembic upgrade head
-
+# Single entrypoint, dispatched by the first arg. Migrations are their OWN
+# command run by a dedicated one-shot `migrate` service in docker-compose, so
+# that api and worker (which can each be scaled to N replicas) never run
+# `alembic upgrade head` concurrently and race on creating the enum type.
 case "${1:-api}" in
+  migrate)
+    echo "[entrypoint] applying migrations..."
+    exec alembic upgrade head
+    ;;
   api)
     echo "[entrypoint] starting API..."
     exec uvicorn app.main:app --host 0.0.0.0 --port 8000
     ;;
   worker)
     echo "[entrypoint] starting worker..."
-    # app.worker is added in Stage 3.
     exec python -m app.worker
     ;;
   *)
