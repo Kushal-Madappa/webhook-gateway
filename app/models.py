@@ -37,6 +37,9 @@ class EventStatus(str, enum.Enum):
     delivered  -> downstream returned 2xx
     failed     -> a delivery attempt failed but attempts remain (will retry)
     dead       -> exhausted max_attempts; parked in the dead-letter queue
+    superseded -> dropped by the monotonic guard: a newer status_ordinal for the
+                  same resource_key was already delivered, so this stale update
+                  must never reach the downstream
     """
 
     pending = "pending"
@@ -44,6 +47,7 @@ class EventStatus(str, enum.Enum):
     delivered = "delivered"
     failed = "failed"
     dead = "dead"
+    superseded = "superseded"
 
 
 class Source(Base):

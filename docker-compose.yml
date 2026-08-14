@@ -50,6 +50,13 @@ services:
     command: ["worker"]
     environment:
       DATABASE_URL: postgresql+psycopg://gateway:gateway@db:5432/gateway
+      # Tuning knobs default to production-sane values but can be overridden from
+      # the host env, e.g. `MAX_ATTEMPTS=3 BASE_BACKOFF_SECONDS=0.3 docker compose up`.
+      MAX_ATTEMPTS: ${MAX_ATTEMPTS:-6}
+      BASE_BACKOFF_SECONDS: ${BASE_BACKOFF_SECONDS:-2}
+      MAX_BACKOFF_SECONDS: ${MAX_BACKOFF_SECONDS:-3600}
+      WORKER_POLL_INTERVAL_SECONDS: ${WORKER_POLL_INTERVAL_SECONDS:-1}
+      DELIVERY_TIMEOUT_SECONDS: ${DELIVERY_TIMEOUT_SECONDS:-10}
     depends_on:
       migrate:
         condition: service_completed_successfully
