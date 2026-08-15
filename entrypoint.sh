@@ -12,7 +12,9 @@ case "${1:-api}" in
     ;;
   api)
     echo "[entrypoint] starting API..."
-    exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+    # --no-access-log: our own structured middleware emits one JSON line per
+    # request, so uvicorn's plain-text access log would just be noisy duplicates.
+    exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-access-log
     ;;
   worker)
     echo "[entrypoint] starting worker..."

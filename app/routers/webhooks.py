@@ -6,6 +6,7 @@ Flow: look up source -> verify HMAC over raw body -> parse -> idempotent insert
 from __future__ import annotations
 
 import json
+import logging
 
 from fastapi import APIRouter, Request
 from fastapi.concurrency import run_in_threadpool
@@ -17,6 +18,7 @@ from app.models import Source
 from app.security import verify_signature
 
 router = APIRouter(prefix="/v1", tags=["webhooks"])
+log = logging.getLogger("api.ingest")
 
 
 def _ingest_sync(source_name: str, raw_body: bytes, signature: str | None, event_id_header: str | None):
@@ -57,10 +59,17 @@ def _ingest_sync(source_name: str, raw_body: bytes, signature: str | None, event
         # before durably persisting, a crash in that window would lose an event
         # the provider will never resend. Persist-then-ACK makes 200 an honest
         # promise that the event is safe in Postgres.
-        return JSONResponse(
-            status_code=200,
-            content={"status": "accepted" if inserted else "duplicate", "event_id": event_id},
+        outcome = "accepted" if inserted else "duplicate"
+        log.info(
+            "ingest",
+            extra={
+                "event_id": event_id,
+                "source": source_name,
+                "provider_event_id": provider_event_id,
+                "outcome": outcome,
+            },
         )
+        return JSONResponse(status_code=200, content={"status": outcome, "event_id": event_id})
     finally:
         session.close()
 

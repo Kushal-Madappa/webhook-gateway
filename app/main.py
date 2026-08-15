@@ -1,21 +1,46 @@
-"""FastAPI application entrypoint.
-
-Stage 2 exposes /healthz plus the ingest and admin source endpoints. Inspection
-and replay endpoints are added in a later stage.
-"""
+"""FastAPI application entrypoint."""
 from __future__ import annotations
 
-from fastapi import Depends, FastAPI, Response
+import logging
+import time
+import uuid
+
+from fastapi import Depends, FastAPI, Request, Response
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from app.routers import sources, webhooks
+from app.logging_config import configure_logging
+from app.routers import events, sources, webhooks
+
+configure_logging()
+log = logging.getLogger("api")
 
 app = FastAPI(title="Reliable Webhook Gateway", version="0.1.0")
 
 app.include_router(sources.router)
 app.include_router(webhooks.router)
+app.include_router(events.router)
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Emit one structured line per request and attach a correlation id."""
+    request_id = str(uuid.uuid4())
+    start = time.perf_counter()
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    log.info(
+        "request",
+        extra={
+            "request_id": request_id,
+            "method": request.method,
+            "path": request.url.path,
+            "status_code": response.status_code,
+            "duration_ms": round((time.perf_counter() - start) * 1000, 2),
+        },
+    )
+    return response
 
 
 @app.get("/healthz")

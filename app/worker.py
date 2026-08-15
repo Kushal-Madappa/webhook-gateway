@@ -29,12 +29,10 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import SessionLocal
+from app.logging_config import configure_logging
 from app.models import Event, EventStatus
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s [worker] %(message)s",
-)
+configure_logging()
 log = logging.getLogger("worker")
 
 # A fresh event (pending) or one whose last attempt failed (failed) can become
@@ -135,8 +133,13 @@ def process_one(session: Session, client: httpx.Client) -> str | None:
         event.updated_at = now
         session.commit()
         log.info(
-            "superseded event=%s resource=%s ordinal=%s<%s",
-            event.id, event.resource_key, event.status_ordinal, max_delivered,
+            "superseded",
+            extra={
+                "event_id": str(event.id),
+                "resource_key": event.resource_key,
+                "ordinal": event.status_ordinal,
+                "delivered_ordinal": max_delivered,
+            },
         )
         return str(event.id)
 
@@ -147,8 +150,14 @@ def process_one(session: Session, client: httpx.Client) -> str | None:
     if ok:
         event.status = EventStatus.delivered
         event.last_error = None
-        log.info("delivered event=%s source=%s ordinal=%s",
-                 event.id, event.source.name, event.status_ordinal)
+        log.info(
+            "delivered",
+            extra={
+                "event_id": str(event.id),
+                "source": event.source.name,
+                "ordinal": event.status_ordinal,
+            },
+        )
     else:
         event.attempts += 1
         event.last_error = (error or "unknown error")[:2000]
@@ -156,13 +165,22 @@ def process_one(session: Session, client: httpx.Client) -> str | None:
             # Exhausted retries -> dead-letter. Parked, not deleted, so it can be
             # inspected and replayed (Stage 5).
             event.status = EventStatus.dead
-            log.warning("dead-lettered event=%s attempts=%s error=%s",
-                        event.id, event.attempts, error)
+            log.warning(
+                "dead-lettered",
+                extra={"event_id": str(event.id), "attempts": event.attempts, "error": error},
+            )
         else:
             event.status = EventStatus.failed
             event.next_attempt_at = now + backoff_delay(event.attempts)
-            log.warning("delivery failed event=%s attempt=%s error=%s",
-                        event.id, event.attempts, error)
+            log.warning(
+                "delivery failed",
+                extra={
+                    "event_id": str(event.id),
+                    "attempt": event.attempts,
+                    "next_attempt_at": event.next_attempt_at.isoformat(),
+                    "error": error,
+                },
+            )
     event.updated_at = now
     session.commit()  # (6) releases row lock + advisory lock
     return str(event.id)
